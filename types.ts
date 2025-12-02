@@ -4,6 +4,11 @@ export interface Repo {
   description: string;
   starsTrend: string; // e.g., "+500 stars/day"
   tags: string[];
+  // New Metadata Fields
+  lastPushedAt?: string;
+  isArchived?: boolean;
+  starsCount?: number;
+  language?: string;
 }
 
 export type TimeFrame = '3d' | '7d' | '14d';

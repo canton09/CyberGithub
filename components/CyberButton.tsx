@@ -26,7 +26,7 @@ const CyberButton: React.FC<CyberButtonProps> = ({
       onClick={onClick}
       disabled={disabled}
       className={`
-        relative px-6 py-2 border-2 font-mono uppercase tracking-widest text-sm
+        relative px-6 py-3 md:py-2 border-2 font-mono uppercase tracking-widest text-base md:text-sm
         transition-all duration-200 transform
         clip-path-polygon
         ${colors[variant]}
@@ -37,7 +37,7 @@ const CyberButton: React.FC<CyberButtonProps> = ({
         clipPath: 'polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%)'
       }}
     >
-      <span className="relative z-10 flex items-center gap-2">
+      <span className="relative z-10 flex items-center gap-2 justify-center">
         {children}
       </span>
     </button>
