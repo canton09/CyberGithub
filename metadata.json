@@ -1,0 +1,5 @@
+{
+  "name": "CyberGit 猎手",
+  "description": "赛博朋克风格的GitHub自动趋势追踪器，利用AI搜索监控近期飙升的开源项目。",
+  "requestFramePermissions": []
+}
