@@ -42,7 +42,7 @@ const CountDown: React.FC = () => {
 
   return (
     <div className="flex flex-col items-end">
-      <span className="text-xs md:text-[10px] text-gray-500 uppercase tracking-widest">下一次自动扫描倒计时</span>
+      <span className="text-xs text-gray-500 uppercase tracking-widest font-medium">下一次自动扫描倒计时</span>
       <span className="text-3xl md:text-2xl font-cyber text-fuchsia-500 tabular-nums neon-text-pink">
         {timeLeft}
       </span>

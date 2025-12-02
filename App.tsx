@@ -275,7 +275,7 @@ const App: React.FC = () => {
           {/* Last Updated Badge */}
           {lastUpdated && (
             <div className="hidden md:flex flex-col text-right mr-auto ml-4 mb-2">
-              <span className="text-[10px] text-gray-600 uppercase">上次同步时间</span>
+              <span className="text-xs text-gray-500 uppercase">上次同步时间</span>
               <span className="text-xs font-mono text-cyan-500/80 font-bold">
                  {formatLastUpdated(lastUpdated)}
               </span>
@@ -387,7 +387,7 @@ const App: React.FC = () => {
       {/* Footer / Logs */}
       <footer className="mt-12">
         <SystemLog status={status} logs={logs} />
-        <div className="flex justify-between items-center text-xs md:text-[10px] text-gray-600 font-mono mt-2 uppercase">
+        <div className="flex justify-between items-center text-xs text-gray-500 font-mono mt-2 uppercase">
           <span>安全连接：已加密</span>
           <span>CYBERGIT_HUNTER © 2077</span>
         </div>

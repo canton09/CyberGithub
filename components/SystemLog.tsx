@@ -43,17 +43,17 @@ const SystemLog: React.FC<SystemLogProps> = ({ status, logs }) => {
       className="font-mono text-sm md:text-xs border-t-2 border-gray-800 bg-black p-4 h-40 md:h-32 overflow-y-auto w-full relative"
     >
       <div className="flex justify-between items-center mb-2 sticky top-0 bg-black/90 pb-2 border-b border-gray-900 z-10">
-        <span className="text-gray-500 uppercase">系统日志终端</span>
-        <span className={`uppercase font-bold ${getStatusColor()}`}>
+        <span className="text-gray-400 font-bold uppercase tracking-wider text-xs">系统日志终端</span>
+        <span className={`uppercase font-bold text-xs ${getStatusColor()}`}>
           [{getStatusText()}]
         </span>
       </div>
       <div className="space-y-1 pb-2">
         {logs.map((log, i) => (
-          <div key={i} className="flex gap-2">
-            <span className="text-gray-600">[{new Date().toLocaleTimeString('en-US', {hour12: false})}]</span>
-            <span className="text-cyan-700">{'>'}</span>
-            <span className="text-cyan-300/80">{log}</span>
+          <div key={i} className="flex gap-2 text-xs md:text-xs">
+            <span className="text-gray-500 flex-shrink-0">[{new Date().toLocaleTimeString('en-US', {hour12: false})}]</span>
+            <span className="text-cyan-700 flex-shrink-0">{'>'}</span>
+            <span className="text-cyan-300/90 leading-relaxed">{log}</span>
           </div>
         ))}
       </div>

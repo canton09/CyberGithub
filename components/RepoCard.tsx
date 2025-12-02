@@ -41,26 +41,86 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
     }
   };
 
-  // Status Logic
+  // Advanced Status Logic - 7 Tiers
   const getStatusInfo = () => {
+    // Priority 1: Frozen/Archived
     if (repo.isArchived) {
-      return { label: '已归档 (ARCHIVED)', color: 'text-red-500', dot: 'bg-red-500', border: 'border-red-500/30 bg-red-900/10' };
+      return { 
+        label: '已归档 (FROZEN)', 
+        color: 'text-fuchsia-300', 
+        dot: 'bg-fuchsia-500', 
+        border: 'border-fuchsia-500/40 bg-fuchsia-900/20 shadow-[0_0_8px_rgba(217,70,239,0.2)]' 
+      };
     }
     
+    // Priority 2: Missing Data
     if (!repo.lastPushedAt) {
-      return { label: '状态未知 (UNKNOWN)', color: 'text-gray-500', dot: 'bg-gray-500', border: 'border-gray-700 bg-gray-900/20' };
+      return { 
+        label: '信号丢失 (UNKNOWN)', 
+        color: 'text-gray-500', 
+        dot: 'bg-gray-600', 
+        border: 'border-gray-700 bg-gray-900/20' 
+      };
     }
 
     const lastPush = new Date(repo.lastPushedAt);
     const now = new Date();
-    const daysSincePush = Math.floor((now.getTime() - lastPush.getTime()) / (1000 * 3600 * 24));
+    const diffMs = now.getTime() - lastPush.getTime();
+    const daysSincePush = Math.floor(diffMs / (1000 * 3600 * 24));
 
-    if (daysSincePush < 30) {
-      return { label: '活跃信号 (LIVE)', color: 'text-green-400', dot: 'bg-green-400 animate-pulse', border: 'border-green-500/30 bg-green-900/10' };
-    } else if (daysSincePush < 180) {
-      return { label: '休眠中 (DORMANT)', color: 'text-yellow-500', dot: 'bg-yellow-500', border: 'border-yellow-500/30 bg-yellow-900/10' };
-    } else {
-      return { label: '信号丢失 (LOST)', color: 'text-red-400', dot: 'bg-red-400', border: 'border-red-500/30 bg-red-900/10' };
+    // Tier 1: Hyper Active (< 3 days)
+    if (daysSincePush <= 3) {
+      return { 
+        label: '极度活跃 (CRITICAL)', 
+        color: 'text-cyan-400', 
+        dot: 'bg-cyan-400 animate-ping', 
+        border: 'border-cyan-400/50 bg-cyan-900/30 shadow-[0_0_10px_rgba(34,211,238,0.3)]' 
+      };
+    } 
+    // Tier 2: Active (< 7 days)
+    else if (daysSincePush <= 7) {
+      return { 
+        label: '在线 (ONLINE)', 
+        color: 'text-green-400', 
+        dot: 'bg-green-500 animate-pulse', 
+        border: 'border-green-500/40 bg-green-900/20 shadow-[0_0_5px_rgba(34,197,94,0.25)]' 
+      };
+    } 
+    // Tier 3: Stable (< 30 days)
+    else if (daysSincePush <= 30) {
+      return { 
+        label: '稳定 (STABLE)', 
+        color: 'text-emerald-400', 
+        dot: 'bg-emerald-500', 
+        border: 'border-emerald-600/30 bg-emerald-900/10' 
+      };
+    } 
+    // Tier 4: Idle (< 90 days)
+    else if (daysSincePush <= 90) {
+      return { 
+        label: '待机 (IDLE)', 
+        color: 'text-yellow-400', 
+        dot: 'bg-yellow-500', 
+        border: 'border-yellow-500/30 bg-yellow-900/10' 
+      };
+    } 
+    // Tier 5: Decay (< 180 days)
+    else if (daysSincePush <= 180) {
+      return { 
+        label: '衰退 (DECAY)', 
+        color: 'text-orange-500', 
+        dot: 'bg-orange-600', 
+        border: 'border-orange-600/30 bg-orange-900/10' 
+      };
+    } 
+    // Tier 6: Offline (> 180 days)
+    else {
+      return { 
+        label: '离线 (OFFLINE)', 
+        color: 'text-red-500', 
+        dot: 'bg-red-600', 
+        border: 'border-red-600/30 bg-red-900/10 shadow-[0_0_5px_rgba(220,38,38,0.2)]' 
+      };
     }
   };
 
@@ -68,12 +128,12 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
     if (!dateStr) return '';
     const date = new Date(dateStr);
     const now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / 1000); // seconds
+    const diffSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-    if (diff < 60) return '刚刚';
-    if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
-    if (diff < 2592000) return `${Math.floor(diff / 86400)}天前`;
+    if (diffSeconds < 60) return '刚刚';
+    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}分钟前`;
+    if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}小时前`;
+    if (diffSeconds < 2592000) return `${Math.floor(diffSeconds / 86400)}天前`;
     return date.toLocaleDateString();
   };
 
@@ -155,7 +215,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
             {isGenerating && (
               <div className="relative z-10 flex flex-col items-center justify-center">
                  <div className="w-8 h-8 border-2 border-fuchsia-500 border-t-transparent rounded-full animate-spin mb-2 shadow-[0_0_10px_rgba(217,70,239,0.4)]"></div>
-                 <span className="text-[10px] font-mono text-fuchsia-400 animate-pulse tracking-widest">NEURAL RENDERING...</span>
+                 <span className="text-xs font-mono text-fuchsia-400 animate-pulse tracking-widest font-bold">NEURAL RENDERING...</span>
               </div>
             )}
 
@@ -167,7 +227,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
                   loading="lazy"
                   className="relative z-10 w-full h-full object-cover opacity-90 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
                 />
-                <div className="absolute bottom-0 right-0 z-20 bg-black/80 px-2 py-0.5 text-[8px] text-fuchsia-500 font-mono border-tl border-fuchsia-500/30 backdrop-blur-sm">
+                <div className="absolute bottom-0 right-0 z-20 bg-black/80 px-2 py-0.5 text-[10px] text-fuchsia-500 font-mono border-tl border-fuchsia-500/30 backdrop-blur-sm">
                   AI GENERATED
                 </div>
               </>
@@ -222,39 +282,39 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
         </div>
 
         {/* Status Bar */}
-        <div className={`flex items-center justify-between px-2 py-1 mb-3 rounded-sm border ${status.border}`}>
+        <div className={`flex items-center justify-between px-2 py-2 mb-3 rounded-sm border transition-all duration-300 ${status.border}`}>
             <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${status.dot}`}></span>
-                <span className={`text-[10px] md:text-[9px] font-mono font-bold uppercase ${status.color}`}>
+                <span className={`w-2 h-2 rounded-full shadow-[0_0_5px_currentColor] ${status.dot}`}></span>
+                <span className={`text-xs font-mono font-bold uppercase tracking-wide ${status.color}`}>
                     {status.label}
                 </span>
             </div>
             {repo.lastPushedAt && (
-                <span className="text-[10px] md:text-[9px] font-mono text-gray-500">
-                    上次更新: {formatRelativeTime(repo.lastPushedAt)}
+                <span className="text-xs font-mono text-gray-400 font-medium whitespace-nowrap ml-2">
+                    {formatRelativeTime(repo.lastPushedAt)}
                 </span>
             )}
         </div>
 
         {/* Stats Badge */}
         <div className="mb-3 flex flex-wrap gap-2">
-             <span className="inline-block text-sm md:text-xs font-mono text-fuchsia-400 border border-fuchsia-900/50 px-2 py-1 bg-fuchsia-900/10">
+             <span className="inline-block text-xs font-mono font-medium text-fuchsia-400 border border-fuchsia-900/50 px-2 py-1 bg-fuchsia-900/10">
               {repo.starsTrend}
             </span>
             {repo.starsCount !== undefined && (
-                 <span className="inline-block text-sm md:text-xs font-mono text-yellow-500/80 border border-yellow-900/30 px-2 py-1 bg-yellow-900/5">
+                 <span className="inline-block text-xs font-mono font-medium text-yellow-500/80 border border-yellow-900/30 px-2 py-1 bg-yellow-900/5">
                   ★ {repo.starsCount.toLocaleString()}
                 </span>
             )}
             {repo.language && (
-                 <span className="inline-block text-sm md:text-xs font-mono text-cyan-500/80 border border-cyan-900/30 px-2 py-1 bg-cyan-900/5">
+                 <span className="inline-block text-xs font-mono font-medium text-cyan-500/80 border border-cyan-900/30 px-2 py-1 bg-cyan-900/5">
                   {repo.language}
                 </span>
             )}
         </div>
 
         {/* Owner/Url Info */}
-        <div className="mb-3 font-mono text-sm md:text-xs text-gray-500 truncate">
+        <div className="mb-3 font-mono text-xs text-gray-500 truncate">
           <span className="text-cyan-700 select-none">{'>'} </span>
           <a href={repo.url} target="_blank" rel="noopener noreferrer" className="hover:text-cyan-400 transition-colors">{repo.name}</a>
         </div>
@@ -270,7 +330,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
         {/* Tags */}
         <div className="flex flex-wrap gap-2 mb-4 mt-auto">
           {repo.tags.map((tag, i) => (
-            <span key={i} className="text-xs md:text-[10px] uppercase px-2 py-1 md:py-0.5 border border-green-900/50 text-green-500 bg-green-900/10">
+            <span key={i} className="text-xs uppercase px-2 py-1 md:py-0.5 border border-green-900/50 text-green-500 bg-green-900/10">
               #{tag}
             </span>
           ))}
@@ -282,7 +342,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
             href={repo.url} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="flex-1 text-center py-3 md:py-1.5 text-sm md:text-xs font-bold bg-cyan-900/20 text-cyan-400 hover:bg-cyan-500 hover:text-black transition-colors uppercase tracking-widest"
+            className="flex-1 text-center py-3 md:py-2 text-sm md:text-xs font-bold bg-cyan-900/20 text-cyan-400 hover:bg-cyan-500 hover:text-black transition-colors uppercase tracking-widest"
           >
             访问
           </a>
@@ -290,7 +350,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
             onClick={() => {
               navigator.clipboard.writeText(`git clone ${repo.url}`);
             }}
-            className="flex-1 text-center py-3 md:py-1.5 text-sm md:text-xs font-bold bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors uppercase tracking-widest"
+            className="flex-1 text-center py-3 md:py-2 text-sm md:text-xs font-bold bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white transition-colors uppercase tracking-widest"
           >
             克隆
           </button>
