@@ -1,15 +1,17 @@
 import { Repo, TimeFrame } from "../types";
 import { fetchRepoDetails } from "./geminiService";
 
-// Security: API Keys are loaded from Environment Variables to prevent source code leakage.
-// Please configure DEEPSEEK_API_KEY in your project's .env file or deployment settings.
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+// Security: API Keys are loaded from Environment Variables OR User Input
+const ENV_DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = "deepseek-reasoner";
 
-export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame): Promise<Repo[]> => {
-  if (!DEEPSEEK_API_KEY) {
-    throw new Error("配置错误: 未找到 DEEPSEEK_API_KEY 环境变量。为了安全起见，请在环境配置中设置您的密钥，不要直接硬编码在源码中。");
+export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame, userApiKey?: string): Promise<Repo[]> => {
+  // Priority: User Input > Environment Variable
+  const apiKey = userApiKey || ENV_DEEPSEEK_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("未检测到 API Key。请点击上方的 'KEY' 按钮并在设置中输入您的 DeepSeek API Key。");
   }
 
   const dayMap = {
@@ -57,7 +59,7 @@ export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame): Promise<
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`
+        "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: DEEPSEEK_MODEL,
@@ -74,6 +76,10 @@ export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame): Promise<
         stream: false
       })
     });
+
+    if (response.status === 401) {
+       throw new Error("DeepSeek API 鉴权失败。请检查您的 API Key 是否正确。");
+    }
 
     if (!response.ok) {
       const errText = await response.text();

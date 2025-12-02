@@ -10,22 +10,40 @@ import CountDown from './components/CountDown';
 import BackToTop from './components/BackToTop';
 
 const CACHE_PREFIX = 'cybergit_cache_';
-const FAV_STORAGE_KEY = 'cybergit_fav_vault'; // New key for full object storage
+const FAV_STORAGE_KEY = 'cybergit_fav_vault';
+const DEEPSEEK_KEY_STORAGE = 'cybergit_ds_key';
+// Fallback key provided by user for demo purposes
+const DEFAULT_DS_KEY = "sk-aba4ff8f46bd4b289d534dfe736a40a3";
 
 type ViewMode = 'scanner' | 'vault';
 type AIProvider = 'google' | 'deepseek';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('scanner');
-  const [aiProvider, setAiProvider] = useState<AIProvider>('google');
+  const [aiProvider, setAiProvider] = useState<AIProvider>('deepseek'); 
   const [activeTab, setActiveTab] = useState<TimeFrame>('3d');
   const activeTabRef = useRef<TimeFrame>('3d');
   
   const [repos, setRepos] = useState<Repo[]>([]);
-  const [favorites, setFavorites] = useState<Repo[]>([]); // Now stores full objects
+  const [favorites, setFavorites] = useState<Repo[]>([]);
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
   const [logs, setLogs] = useState<string[]>(['系统初始化完成...', '等待指令...']);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+
+  // DeepSeek Key Management
+  // Initialize from storage OR default key to prevent "Missing Key" error on first load
+  const [deepseekKey, setDeepseekKey] = useState<string>(() => {
+      return localStorage.getItem(DEEPSEEK_KEY_STORAGE) || DEFAULT_DS_KEY;
+  });
+  
+  // Use Ref to avoid stale closures in setTimeout/async calls
+  const deepseekKeyRef = useRef(deepseekKey);
+  useEffect(() => {
+    deepseekKeyRef.current = deepseekKey;
+  }, [deepseekKey]);
+
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const keyInputRef = useRef<HTMLInputElement>(null);
 
   const addLog = (msg: string) => {
     setLogs(prev => [...prev, msg]);
@@ -53,8 +71,6 @@ const App: React.FC = () => {
 
   const loadCache = (frame: TimeFrame): { data: Repo[], timestamp: number } | null => {
     try {
-      // Cache is split by provider? Currently simplified to general cache.
-      // If we switch providers, we might want to force refresh, but for now we share cache.
       const stored = localStorage.getItem(CACHE_PREFIX + frame);
       if (!stored) return null;
       
@@ -79,6 +95,16 @@ const App: React.FC = () => {
     localStorage.setItem(CACHE_PREFIX + frame, JSON.stringify({ data, timestamp }));
     if (activeTabRef.current === frame) {
       setLastUpdated(timestamp);
+    }
+  };
+
+  const saveDeepseekKey = () => {
+    if (keyInputRef.current) {
+        const val = keyInputRef.current.value.trim();
+        setDeepseekKey(val);
+        localStorage.setItem(DEEPSEEK_KEY_STORAGE, val);
+        setShowKeyModal(false);
+        addLog('DeepSeek 安全密钥已更新至本地存储。');
     }
   };
 
@@ -117,7 +143,12 @@ const App: React.FC = () => {
         results = await fetchTrendingRepos(frame);
       } else {
         addLog("接入 DeepSeek 推理网络 (Reasoning Mode)...");
-        results = await fetchDeepSeekTrendingRepos(frame);
+        // IMPORTANT: Use the Ref value to ensure we have the latest key inside async flows
+        const currentKey = deepseekKeyRef.current;
+        if (!currentKey) {
+             throw new Error("API Key 未配置。请点击 'KEY' 按钮设置。");
+        }
+        results = await fetchDeepSeekTrendingRepos(frame, currentKey);
       }
       
       const duration = ((Date.now() - start) / 1000).toFixed(2);
@@ -139,6 +170,11 @@ const App: React.FC = () => {
       setStatus(AppStatus.ERROR);
       addLog(`严重错误: ${error.message || '未知网络故障'}`);
       
+      // Auto-open key modal if key is missing/invalid for DeepSeek
+      if (aiProvider === 'deepseek' && (error.message.includes('API Key') || error.message.includes('401'))) {
+         setShowKeyModal(true);
+      }
+
       const staleCache = localStorage.getItem(CACHE_PREFIX + frame);
       if (staleCache) {
         const parsed = JSON.parse(staleCache);
@@ -176,7 +212,6 @@ const App: React.FC = () => {
     alert('精选简报已复制！');
   };
 
-  // Toggle Favorite (Stores Full Object)
   const toggleFavorite = (repo: Repo) => {
     setFavorites(prev => {
       const exists = prev.some(f => f.name === repo.name);
@@ -195,18 +230,16 @@ const App: React.FC = () => {
     });
   };
 
-  // Initial load effect
+  // Initial load
   useEffect(() => {
-    addLog('中枢接口已加载。就绪。');
+    addLog('中枢接口已加载。默认接入: DeepSeek Network。');
     
-    // Load favorites from Vault
+    // Favorites load
     const storedFavs = localStorage.getItem(FAV_STORAGE_KEY);
     if (storedFavs) {
       try {
         const parsed = JSON.parse(storedFavs);
-        // Handle migration from old string[] version to Repo[] version
         if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
-          // Old version detected, clear it to avoid crashes or handle gracefully
           console.warn("Detected legacy favorites format. Clearing.");
           localStorage.removeItem(FAV_STORAGE_KEY);
         } else {
@@ -215,12 +248,10 @@ const App: React.FC = () => {
       } catch(e) { console.error('Fav parse error'); }
     }
 
-    // Load default tab
-    handleScan('3d', false);
+    // Delay initial scan slightly
+    setTimeout(() => handleScan('3d', false), 500);
   }, []);
 
-  // When AI provider changes, we might want to refresh logs or show status, 
-  // but we don't force auto-scan to save tokens unless user clicks.
   const switchProvider = () => {
     const next = aiProvider === 'google' ? 'deepseek' : 'google';
     setAiProvider(next);
@@ -233,11 +264,47 @@ const App: React.FC = () => {
     return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   };
 
-  // Determine what to display based on view
   const displayedRepos = currentView === 'vault' ? favorites : repos;
 
   return (
-    <div className="min-h-screen flex flex-col max-w-7xl mx-auto px-4 py-6 md:px-8">
+    <div className="min-h-screen flex flex-col max-w-7xl mx-auto px-4 py-6 md:px-8 relative">
+      
+      {/* API Key Modal */}
+      {showKeyModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+           <div className="bg-[#050505] border-2 border-indigo-500 w-full max-w-md p-6 shadow-[0_0_30px_rgba(99,102,241,0.3)] relative">
+              <h3 className="text-xl font-cyber text-indigo-400 mb-4 tracking-wider flex items-center gap-2">
+                <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
+                DEEPSEEK 密钥配置
+              </h3>
+              <p className="text-xs text-gray-400 font-mono mb-4">
+                 请输入您的 API Key 以接入 R1 推理网络。密钥仅存储在本地浏览器中。
+              </p>
+              <input 
+                 ref={keyInputRef}
+                 defaultValue={deepseekKey}
+                 type="password"
+                 placeholder="sk-..."
+                 className="w-full bg-gray-900/50 border border-gray-700 text-indigo-100 font-mono text-sm p-3 mb-6 focus:border-indigo-500 focus:outline-none focus:shadow-[0_0_10px_rgba(99,102,241,0.3)] transition-all placeholder-gray-700"
+              />
+              <div className="flex gap-4">
+                 <button 
+                   onClick={() => setShowKeyModal(false)}
+                   className="flex-1 py-2 font-mono text-xs uppercase text-gray-500 hover:text-white border border-transparent hover:border-gray-700 transition-all"
+                 >
+                   取消
+                 </button>
+                 <button 
+                   onClick={saveDeepseekKey}
+                   className="flex-1 py-2 font-mono text-xs uppercase bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all"
+                 >
+                   保存密钥
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex flex-col md:flex-row justify-between items-end border-b-2 border-cyan-900/50 pb-6 mb-8 gap-4">
         <div>
@@ -300,17 +367,30 @@ const App: React.FC = () => {
           <div className="hidden md:flex flex-col text-right mr-auto ml-4 mb-2">
             <div className="flex flex-col items-end mb-2">
                 <span className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">核心处理单元</span>
-                <button 
-                  onClick={switchProvider}
-                  className={`text-xs font-mono px-2 py-0.5 border rounded-sm transition-all flex items-center gap-2
-                    ${aiProvider === 'google' 
-                        ? 'border-green-500/50 text-green-400 bg-green-900/10' 
-                        : 'border-indigo-500/50 text-indigo-400 bg-indigo-900/10'}
-                  `}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${aiProvider === 'google' ? 'bg-green-500' : 'bg-indigo-500'}`}></span>
-                  {aiProvider === 'google' ? 'GEMINI-2.5-FLASH' : 'DEEPSEEK-R1-REASONER'}
-                </button>
+                <div className="flex gap-1">
+                   <button 
+                    onClick={switchProvider}
+                    className={`text-xs font-mono px-2 py-0.5 border rounded-sm transition-all flex items-center gap-2
+                        ${aiProvider === 'google' 
+                            ? 'border-green-500/50 text-green-400 bg-green-900/10' 
+                            : 'border-indigo-500/50 text-indigo-400 bg-indigo-900/10'}
+                    `}
+                    >
+                    <span className={`w-1.5 h-1.5 rounded-full ${aiProvider === 'google' ? 'bg-green-500' : 'bg-indigo-500'}`}></span>
+                    {aiProvider === 'google' ? 'GEMINI-2.5-FLASH' : 'DEEPSEEK-R1-REASONER'}
+                   </button>
+                   
+                   {/* Key Config Button */}
+                   {aiProvider === 'deepseek' && (
+                     <button 
+                       onClick={() => setShowKeyModal(true)}
+                       className="text-[10px] font-mono px-2 py-0.5 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 rounded-sm transition-colors"
+                       title="设置 DeepSeek API Key"
+                     >
+                       KEY
+                     </button>
+                   )}
+                </div>
             </div>
             <div>
                 <span className="text-[10px] text-gray-500 uppercase tracking-wider mr-2">上次同步</span>
@@ -354,17 +434,27 @@ const App: React.FC = () => {
       {currentView === 'scanner' && (
         <div className="md:hidden flex justify-between items-center mb-4 px-1">
              <span className="text-xs font-mono text-gray-500">{formatLastUpdated(lastUpdated)}</span>
-             <button 
-                onClick={switchProvider}
-                className={`text-xs font-mono px-3 py-1 border rounded-sm transition-all flex items-center gap-2
-                ${aiProvider === 'google' 
-                    ? 'border-green-500/50 text-green-400 bg-green-900/10' 
-                    : 'border-indigo-500/50 text-indigo-400 bg-indigo-900/10'}
-                `}
-            >
-                <span className={`w-1.5 h-1.5 rounded-full ${aiProvider === 'google' ? 'bg-green-500' : 'bg-indigo-500'}`}></span>
-                {aiProvider === 'google' ? 'GEMINI' : 'DEEPSEEK'}
-            </button>
+             <div className="flex gap-2">
+                 <button 
+                    onClick={switchProvider}
+                    className={`text-xs font-mono px-3 py-1 border rounded-sm transition-all flex items-center gap-2
+                    ${aiProvider === 'google' 
+                        ? 'border-green-500/50 text-green-400 bg-green-900/10' 
+                        : 'border-indigo-500/50 text-indigo-400 bg-indigo-900/10'}
+                    `}
+                >
+                    <span className={`w-1.5 h-1.5 rounded-full ${aiProvider === 'google' ? 'bg-green-500' : 'bg-indigo-500'}`}></span>
+                    {aiProvider === 'google' ? 'GEMINI' : 'DEEPSEEK'}
+                </button>
+                 {aiProvider === 'deepseek' && (
+                     <button 
+                       onClick={() => setShowKeyModal(true)}
+                       className="text-xs font-mono px-3 py-1 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 rounded-sm"
+                     >
+                       KEY
+                     </button>
+                 )}
+             </div>
         </div>
       )}
 
