@@ -1,12 +1,17 @@
 import { Repo, TimeFrame } from "../types";
 import { fetchRepoDetails } from "./geminiService";
 
-// DeepSeek Credentials
-const DEEPSEEK_API_KEY = "sk-aba4ff8f46bd4b289d534dfe736a40a3";
-const DEEPSEEK_BASE_URL = "https://api.deepseek.com/chat/completions"; // Using standard OpenAI compatible endpoint
+// Security: API Keys are loaded from Environment Variables to prevent source code leakage.
+// Please configure DEEPSEEK_API_KEY in your project's .env file or deployment settings.
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_MODEL = "deepseek-reasoner";
 
 export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame): Promise<Repo[]> => {
+  if (!DEEPSEEK_API_KEY) {
+    throw new Error("配置错误: 未找到 DEEPSEEK_API_KEY 环境变量。为了安全起见，请在环境配置中设置您的密钥，不要直接硬编码在源码中。");
+  }
+
   const dayMap = {
     '3d': '3',
     '7d': '7',
