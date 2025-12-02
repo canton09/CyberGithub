@@ -12,7 +12,7 @@ Tone: Cyberpunk, concise, technical.
 
 // Helper: Fetch detailed metadata from GitHub
 // Note: Unauthenticated requests are limited to 60/hr.
-const fetchRepoDetails = async (name: string): Promise<Partial<Repo> | null> => {
+export const fetchRepoDetails = async (name: string): Promise<Partial<Repo> | null> => {
   try {
     const response = await fetch(`https://api.github.com/repos/${name}`, {
       method: 'GET',

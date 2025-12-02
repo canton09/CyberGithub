@@ -2,18 +2,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Repo, TimeFrame, AppStatus } from './types';
 import { fetchTrendingRepos } from './services/geminiService';
+import { fetchDeepSeekTrendingRepos } from './services/deepseekService';
 import CyberButton from './components/CyberButton';
 import RepoCard from './components/RepoCard';
 import SystemLog from './components/SystemLog';
 import CountDown from './components/CountDown';
+import BackToTop from './components/BackToTop';
 
 const CACHE_PREFIX = 'cybergit_cache_';
 const FAV_STORAGE_KEY = 'cybergit_fav_vault'; // New key for full object storage
 
 type ViewMode = 'scanner' | 'vault';
+type AIProvider = 'google' | 'deepseek';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('scanner');
+  const [aiProvider, setAiProvider] = useState<AIProvider>('google');
   const [activeTab, setActiveTab] = useState<TimeFrame>('3d');
   const activeTabRef = useRef<TimeFrame>('3d');
   
@@ -49,6 +53,8 @@ const App: React.FC = () => {
 
   const loadCache = (frame: TimeFrame): { data: Repo[], timestamp: number } | null => {
     try {
+      // Cache is split by provider? Currently simplified to general cache.
+      // If we switch providers, we might want to force refresh, but for now we share cache.
       const stored = localStorage.getItem(CACHE_PREFIX + frame);
       if (!stored) return null;
       
@@ -93,18 +99,27 @@ const App: React.FC = () => {
 
     setStatus(AppStatus.SCANNING);
     const timeLabel = frame === '3d' ? '3天' : frame === '7d' ? '7天' : '14天';
+    const providerLabel = aiProvider === 'google' ? 'Gemini 2.5' : 'DeepSeek R1';
     
     if (forceRefresh) {
-      addLog(`指令: 强制刷新数据流...`);
+      addLog(`指令: 强制刷新数据流 (${providerLabel})...`);
     } else {
-      addLog(`启动扫描序列 - 目标范围: 近${timeLabel}...`);
+      addLog(`启动扫描序列 - 目标: 近${timeLabel} (核心: ${providerLabel})...`);
     }
     
     setRepos([]); 
 
     try {
       const start = Date.now();
-      const results = await fetchTrendingRepos(frame);
+      let results: Repo[] = [];
+
+      if (aiProvider === 'google') {
+        results = await fetchTrendingRepos(frame);
+      } else {
+        addLog("接入 DeepSeek 推理网络 (Reasoning Mode)...");
+        results = await fetchDeepSeekTrendingRepos(frame);
+      }
+      
       const duration = ((Date.now() - start) / 1000).toFixed(2);
       
       if (activeTabRef.current !== frame) {
@@ -144,7 +159,8 @@ const App: React.FC = () => {
     
     const date = new Date().toLocaleDateString('zh-CN');
     const title = currentView === 'vault' ? 'CyberGit 收藏库' : 'CyberGit 每日精选';
-    let report = `🤖 *${title} (${date})*\n\n`;
+    const providerSign = aiProvider === 'google' ? 'Gemini Core' : 'DeepSeek Node';
+    let report = `🤖 *${title} (${date})*\n[By ${providerSign}]\n\n`;
     
     targetRepos.forEach((repo, i) => {
       report += `**${i + 1}. ${repo.name.split('/')[1] || repo.name}**\n`;
@@ -202,6 +218,14 @@ const App: React.FC = () => {
     // Load default tab
     handleScan('3d', false);
   }, []);
+
+  // When AI provider changes, we might want to refresh logs or show status, 
+  // but we don't force auto-scan to save tokens unless user clicks.
+  const switchProvider = () => {
+    const next = aiProvider === 'google' ? 'deepseek' : 'google';
+    setAiProvider(next);
+    addLog(`切换核心网络 -> ${next === 'google' ? 'Google Gemini' : 'DeepSeek R1 (Reasoning)'}`);
+  };
 
   const formatLastUpdated = (ts: number | null) => {
     if (!ts) return 'N/A';
@@ -272,15 +296,29 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          {/* Last Updated Badge */}
-          {lastUpdated && (
-            <div className="hidden md:flex flex-col text-right mr-auto ml-4 mb-2">
-              <span className="text-xs text-gray-500 uppercase">上次同步时间</span>
-              <span className="text-xs font-mono text-cyan-500/80 font-bold">
-                 {formatLastUpdated(lastUpdated)}
-              </span>
+          {/* AI Provider Switch & Last Updated */}
+          <div className="hidden md:flex flex-col text-right mr-auto ml-4 mb-2">
+            <div className="flex flex-col items-end mb-2">
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">核心处理单元</span>
+                <button 
+                  onClick={switchProvider}
+                  className={`text-xs font-mono px-2 py-0.5 border rounded-sm transition-all flex items-center gap-2
+                    ${aiProvider === 'google' 
+                        ? 'border-green-500/50 text-green-400 bg-green-900/10' 
+                        : 'border-indigo-500/50 text-indigo-400 bg-indigo-900/10'}
+                  `}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${aiProvider === 'google' ? 'bg-green-500' : 'bg-indigo-500'}`}></span>
+                  {aiProvider === 'google' ? 'GEMINI-2.5-FLASH' : 'DEEPSEEK-R1-REASONER'}
+                </button>
             </div>
-          )}
+            <div>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider mr-2">上次同步</span>
+                <span className="text-xs font-mono text-cyan-500/80 font-bold">
+                    {formatLastUpdated(lastUpdated)}
+                </span>
+            </div>
+          </div>
 
           {/* Action Buttons */}
           <div className="flex-1 flex justify-end items-center gap-4 w-full md:w-auto">
@@ -295,20 +333,38 @@ const App: React.FC = () => {
             
             {status === AppStatus.SCANNING && (
               <div className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-fuchsia-500 shadow-[0_0_10px_rgba(217,70,239,0.8)]"></span>
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${aiProvider === 'deepseek' ? 'bg-indigo-400' : 'bg-fuchsia-400'}`}></span>
+                <span className={`relative inline-flex rounded-full h-3 w-3 shadow-[0_0_10px_rgba(217,70,239,0.8)] ${aiProvider === 'deepseek' ? 'bg-indigo-500' : 'bg-fuchsia-500'}`}></span>
               </div>
             )}
 
             <CyberButton 
               onClick={() => handleScan(activeTab, true)}
               disabled={status === AppStatus.SCANNING}
-              variant="pink"
+              variant={aiProvider === 'deepseek' ? 'cyan' : 'pink'}
               className="flex-1 md:flex-none w-full md:w-auto"
             >
               {status === AppStatus.SCANNING ? '系统扫描中...' : '立即精选更新'}
             </CyberButton>
           </div>
+        </div>
+      )}
+
+      {/* Mobile Provider Switcher */}
+      {currentView === 'scanner' && (
+        <div className="md:hidden flex justify-between items-center mb-4 px-1">
+             <span className="text-xs font-mono text-gray-500">{formatLastUpdated(lastUpdated)}</span>
+             <button 
+                onClick={switchProvider}
+                className={`text-xs font-mono px-3 py-1 border rounded-sm transition-all flex items-center gap-2
+                ${aiProvider === 'google' 
+                    ? 'border-green-500/50 text-green-400 bg-green-900/10' 
+                    : 'border-indigo-500/50 text-indigo-400 bg-indigo-900/10'}
+                `}
+            >
+                <span className={`w-1.5 h-1.5 rounded-full ${aiProvider === 'google' ? 'bg-green-500' : 'bg-indigo-500'}`}></span>
+                {aiProvider === 'google' ? 'GEMINI' : 'DEEPSEEK'}
+            </button>
         </div>
       )}
 
@@ -335,9 +391,15 @@ const App: React.FC = () => {
         {currentView === 'scanner' && status === AppStatus.SCANNING && (
           <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/80 backdrop-blur-sm transition-opacity duration-300">
             <div className="text-center">
-              <div className="inline-block w-16 h-16 border-4 border-t-cyan-500 border-r-transparent border-b-fuchsia-500 border-l-transparent rounded-full animate-spin mb-4"></div>
-              <div className="font-cyber text-xl animate-pulse text-cyan-400">正在接入主网...</div>
-              <div className="font-mono text-xs text-gray-500 mt-2">解密 GitHub API 信号流</div>
+              <div className={`inline-block w-16 h-16 border-4 border-t-transparent border-l-transparent rounded-full animate-spin mb-4
+                 ${aiProvider === 'deepseek' ? 'border-indigo-500 border-b-indigo-300' : 'border-cyan-500 border-b-fuchsia-500'}
+              `}></div>
+              <div className={`font-cyber text-xl animate-pulse ${aiProvider === 'deepseek' ? 'text-indigo-400' : 'text-cyan-400'}`}>
+                {aiProvider === 'deepseek' ? 'DEEPSEEK 推理中...' : '正在接入主网...'}
+              </div>
+              <div className="font-mono text-xs text-gray-500 mt-2">
+                {aiProvider === 'deepseek' ? '思维链计算 / 验证 GitHub 节点' : '解密 GitHub API 信号流'}
+              </div>
             </div>
           </div>
         )}
@@ -366,7 +428,7 @@ const App: React.FC = () => {
            <div className="h-full flex flex-col items-center justify-center text-red-500 border-2 border-red-900/50 bg-red-900/10 p-12">
             <div className="text-6xl mb-4">⚠️</div>
             <p className="font-mono text-lg font-bold">系统故障</p>
-            <p className="font-mono text-sm mt-2">连接已断开。请检查 API 密钥或网络。</p>
+            <p className="font-mono text-sm mt-2">连接已断开。请检查网络或 API 状态。</p>
           </div>
         )}
 
@@ -384,11 +446,14 @@ const App: React.FC = () => {
         </div>
       </main>
 
+      {/* Back To Top Button */}
+      <BackToTop />
+
       {/* Footer / Logs */}
       <footer className="mt-12">
         <SystemLog status={status} logs={logs} />
         <div className="flex justify-between items-center text-xs text-gray-500 font-mono mt-2 uppercase">
-          <span>安全连接：已加密</span>
+          <span>安全连接：{aiProvider === 'deepseek' ? 'DEEPSEEK-R1 加密' : 'GOOGLE-GEMINI 加密'}</span>
           <span>CYBERGIT_HUNTER © 2077</span>
         </div>
       </footer>
