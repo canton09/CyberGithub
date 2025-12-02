@@ -52,8 +52,18 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
         border: 'border-fuchsia-500/40 bg-fuchsia-900/20 shadow-[0_0_8px_rgba(217,70,239,0.2)]' 
       };
     }
+
+    // Priority 2: Rate Limited (New)
+    if (repo.isRateLimited) {
+      return { 
+        label: '加密通道 (SECURE)', 
+        color: 'text-indigo-400', 
+        dot: 'bg-indigo-500 animate-pulse', 
+        border: 'border-indigo-500/40 bg-indigo-900/20 shadow-[0_0_8px_rgba(99,102,241,0.2)]' 
+      };
+    }
     
-    // Priority 2: Missing Data
+    // Priority 3: Missing Data (Real error)
     if (!repo.lastPushedAt) {
       return { 
         label: '信号丢失 (UNKNOWN)', 
@@ -289,10 +299,15 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
                     {status.label}
                 </span>
             </div>
-            {repo.lastPushedAt && (
+            {repo.lastPushedAt && !repo.isRateLimited && (
                 <span className="text-xs font-mono text-gray-400 font-medium whitespace-nowrap ml-2">
                     {formatRelativeTime(repo.lastPushedAt)}
                 </span>
+            )}
+            {repo.isRateLimited && (
+               <span className="text-xs font-mono text-indigo-400/70 font-medium whitespace-nowrap ml-2">
+                   PRIVACY: ON
+               </span>
             )}
         </div>
 

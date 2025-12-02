@@ -25,7 +25,7 @@ const fetchRepoDetails = async (name: string): Promise<Partial<Repo> | null> => 
     
     if (response.status === 403 || response.status === 429) {
       console.warn("GitHub API rate limit reached. Proceeding with limited data.");
-      return {}; // Return empty object to indicate existence but no metadata
+      return { isRateLimited: true }; // Flag as rate limited
     }
 
     if (!response.ok) return null;
@@ -36,12 +36,15 @@ const fetchRepoDetails = async (name: string): Promise<Partial<Repo> | null> => 
       lastPushedAt: data.pushed_at,
       isArchived: data.archived,
       starsCount: data.stargazers_count,
-      language: data.language
+      language: data.language,
+      isRateLimited: false
     };
 
   } catch (e) {
     console.warn(`Network error checking repo ${name}`, e);
-    return {}; // Assume exists on network error
+    // If network fails (not 404), assume it might exist but we can't verify. 
+    // Return empty implies we default to basic display.
+    return { isRateLimited: true }; 
   }
 };
 
@@ -128,19 +131,32 @@ export const fetchTrendingRepos = async (timeFrame: TimeFrame): Promise<Repo[]> 
         // Stop if we have enough
         if (validRepos.length >= TARGET_COUNT) break;
 
-        // Ensure basic structure
-        if (!repo.name || !repo.name.includes('/')) continue;
+        if (!repo.name) continue;
+
+        // CLEANING: Remove URL prefix and .git suffix to get clean "owner/repo"
+        let cleanName = repo.name
+          .replace(/^https?:\/\/github\.com\//, '')
+          .replace(/\.git$/, '')
+          .trim();
+        
+        // Remove trailing slash if present
+        if (cleanName.endsWith('/')) {
+            cleanName = cleanName.slice(0, -1);
+        }
+
+        if (!cleanName.includes('/')) continue; // Must be owner/repo
 
         // Check against GitHub API and get details
-        const details = await fetchRepoDetails(repo.name);
+        const details = await fetchRepoDetails(cleanName);
         
         if (details) {
           validRepos.push({
             ...repo,
+            name: cleanName, // Use the cleaned name
             ...details // Merge real GitHub data
           } as Repo);
         } else {
-          console.warn(`Filtering out dead repo: ${repo.name}`);
+          console.warn(`Filtering out dead repo: ${cleanName}`);
         }
       }
 

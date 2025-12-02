@@ -9,6 +9,7 @@ export interface Repo {
   isArchived?: boolean;
   starsCount?: number;
   language?: string;
+  isRateLimited?: boolean; // New flag for API limit handling
 }
 
 export type TimeFrame = '3d' | '7d' | '14d';
