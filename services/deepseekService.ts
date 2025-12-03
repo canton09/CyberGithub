@@ -1,14 +1,38 @@
 import { Repo, TimeFrame } from "../types";
 import { fetchRepoDetails } from "./geminiService";
 
-// Security: API Keys are loaded from Environment Variables OR User Input
-const ENV_DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+// Security: API Keys are managed via user input (LocalStorage) only.
+// Removed process.env fallback to ensure no keys are in source/build.
 const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions";
-const DEEPSEEK_MODEL = "deepseek-reasoner";
+const DEEPSEEK_MODEL = "deepseek-chat"; // Updated to V3 (user requested V3.2, mapping to standard chat endpoint)
+
+export const validateDeepSeekKey = async (apiKey: string): Promise<boolean> => {
+    if (!apiKey) return false;
+    try {
+        const response = await fetch(DEEPSEEK_BASE_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: DEEPSEEK_MODEL,
+                messages: [
+                    { role: "user", content: "ping" }
+                ],
+                max_tokens: 1
+            })
+        });
+        return response.ok;
+    } catch (e) {
+        console.error("DeepSeek Validation Failed:", e);
+        return false;
+    }
+};
 
 export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame, userApiKey?: string): Promise<Repo[]> => {
-  // Priority: User Input > Environment Variable
-  const apiKey = userApiKey || ENV_DEEPSEEK_API_KEY;
+  // Strict: Only accept User Input (LocalStorage)
+  const apiKey = userApiKey;
 
   if (!apiKey) {
     throw new Error("未检测到 API Key。请点击上方的 'KEY' 按钮并在设置中输入您的 DeepSeek API Key。");
@@ -33,7 +57,7 @@ export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame, userApiKe
     JSON Fields required:
     - name: "owner/repo" (e.g. "facebook/react")
     - url: "https://github.com/owner/repo"
-    - description: Simplified Chinese summary (<100 words).
+    - description: Simplified Chinese summary (strictly 80-100 characters), detailing core features & benefits.
     - starsTrend: Estimated trend (e.g. "+200 stars/day")
     - tags: Array of strings.
 
@@ -47,7 +71,7 @@ export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame, userApiKe
       {
         "name": "owner/repo",
         "url": "https://github.com/owner/repo",
-        "description": "简短的中文介绍...",
+        "description": "这是一个非常强大的开源工具，它提供了自动化部署、实时监控以及智能分析功能。该项目采用Rust编写，性能极高，特别适合处理大规模并发请求，是当前DevOps领域的热门选择。",
         "starsTrend": "High",
         "tags": ["AI", "Tool"]
       }
@@ -87,10 +111,14 @@ export const fetchDeepSeekTrendingRepos = async (timeFrame: TimeFrame, userApiKe
     }
 
     const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || "";
-
-    // DeepSeek R1 (reasoner) might include <think>...</think> blocks. We need to remove them.
-    content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    const message = data.choices?.[0]?.message;
+    let content = message?.content || "";
+    
+    // DeepSeek V3 usually does not return reasoning_content, but we check anyway
+    const reasoning = message?.reasoning_content;
+    if (reasoning) {
+        console.log("【DeepSeek Thinking Process】\n", reasoning);
+    }
 
     // Clean Markdown
     content = content.replace(/```json/g, '').replace(/```/g, '').trim();

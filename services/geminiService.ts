@@ -46,6 +46,23 @@ export const fetchRepoDetails = async (name: string): Promise<Partial<Repo> | nu
   }
 };
 
+export const validateGeminiKey = async (apiKey: string): Promise<boolean> => {
+  if (!apiKey) return false;
+  const ai = new GoogleGenAI({ apiKey });
+  try {
+    // Minimal generation to test auth
+    await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: "ping",
+      config: { maxOutputTokens: 1 }
+    });
+    return true;
+  } catch (e) {
+    console.error("Gemini Validation Failed:", e);
+    return false;
+  }
+};
+
 export const fetchTrendingRepos = async (timeFrame: TimeFrame, apiKey: string): Promise<Repo[]> => {
   if (!apiKey) {
     throw new Error("请配置 Google API Key 以继续");
@@ -75,14 +92,14 @@ export const fetchTrendingRepos = async (timeFrame: TimeFrame, apiKey: string): 
     2. Use double quotes for all keys and string values.
     3. **DO NOT** use double quotes (") INSIDE descriptions. Use single quotes (') instead.
     4. NO trailing commas.
-    5. **TRANSLATION**: The "description" value MUST be in Simplified Chinese (简体中文), summarizing the tool's function in under 100 words.
+    5. **TRANSLATION**: The "description" value MUST be in Simplified Chinese (简体中文). It must be a detailed summary of the tool's core features, usage scenarios, and technical advantages, strictly between 80 and 100 characters.
     
     JSON Structure Example:
     [
       {
         "name": "owner/repo",
         "url": "https://github.com/owner/repo",
-        "description": "这里必须是简体中文的功能简介，少于100字，不要包含内部双引号...",
+        "description": "这是一个非常强大的开源工具，它提供了自动化部署、实时监控以及智能分析功能。该项目采用Rust编写，性能极高，特别适合处理大规模并发请求，是当前DevOps领域的热门选择。",
         "starsTrend": "+100 stars/day",
         "tags": ["Tag1", "Tag2"]
       }
