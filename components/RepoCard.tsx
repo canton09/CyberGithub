@@ -7,9 +7,10 @@ interface RepoCardProps {
   index: number;
   isFavorite: boolean;
   onToggleFavorite: () => void;
+  googleApiKey?: string;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFavorite }) => {
+const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFavorite, googleApiKey }) => {
   const [imageError, setImageError] = useState(false);
   const [aiImage, setAiImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -26,10 +27,11 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, index, isFavorite, onToggleFa
 
   const handleImageError = async () => {
     setImageError(true);
-    if (!aiImage && !isGenerating) {
+    // Only attempt AI generation if we have a key and aren't already generating
+    if (!aiImage && !isGenerating && googleApiKey) {
       setIsGenerating(true);
       try {
-        const generatedUrl = await generateRepoImage(repo.name, repo.description);
+        const generatedUrl = await generateRepoImage(repo.name, repo.description, googleApiKey);
         if (generatedUrl) {
           setAiImage(generatedUrl);
         }

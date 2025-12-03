@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Repo, TimeFrame, AppStatus } from './types';
 import { fetchTrendingRepos } from './services/geminiService';
@@ -12,6 +11,7 @@ import BackToTop from './components/BackToTop';
 const CACHE_PREFIX = 'cybergit_cache_';
 const FAV_STORAGE_KEY = 'cybergit_fav_vault';
 const DEEPSEEK_KEY_STORAGE = 'cybergit_ds_key';
+const GOOGLE_KEY_STORAGE = 'cybergit_google_key';
 // Fallback key provided by user for demo purposes
 const DEFAULT_DS_KEY = "sk-aba4ff8f46bd4b289d534dfe736a40a3";
 
@@ -31,16 +31,26 @@ const App: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   // DeepSeek Key Management
-  // Initialize from storage OR default key to prevent "Missing Key" error on first load
   const [deepseekKey, setDeepseekKey] = useState<string>(() => {
       return localStorage.getItem(DEEPSEEK_KEY_STORAGE) || DEFAULT_DS_KEY;
   });
   
-  // Use Ref to avoid stale closures in setTimeout/async calls
+  // Google Key Management
+  const [googleKey, setGoogleKey] = useState<string>(() => {
+    return localStorage.getItem(GOOGLE_KEY_STORAGE) || '';
+  });
+  
+  // Use Refs to avoid stale closures in setTimeout/async calls
   const deepseekKeyRef = useRef(deepseekKey);
+  const googleKeyRef = useRef(googleKey);
+  
   useEffect(() => {
     deepseekKeyRef.current = deepseekKey;
   }, [deepseekKey]);
+
+  useEffect(() => {
+    googleKeyRef.current = googleKey;
+  }, [googleKey]);
 
   const [showKeyModal, setShowKeyModal] = useState(false);
   const keyInputRef = useRef<HTMLInputElement>(null);
@@ -98,13 +108,20 @@ const App: React.FC = () => {
     }
   };
 
-  const saveDeepseekKey = () => {
+  const saveKey = () => {
     if (keyInputRef.current) {
         const val = keyInputRef.current.value.trim();
-        setDeepseekKey(val);
-        localStorage.setItem(DEEPSEEK_KEY_STORAGE, val);
+        
+        if (aiProvider === 'deepseek') {
+            setDeepseekKey(val);
+            localStorage.setItem(DEEPSEEK_KEY_STORAGE, val);
+        } else {
+            setGoogleKey(val);
+            localStorage.setItem(GOOGLE_KEY_STORAGE, val);
+        }
+
         setShowKeyModal(false);
-        addLog('DeepSeek 安全密钥已更新至本地存储。');
+        addLog(`${aiProvider === 'google' ? 'Google' : 'DeepSeek'} 密钥已更新至本地存储。`);
     }
   };
 
@@ -140,15 +157,18 @@ const App: React.FC = () => {
       let results: Repo[] = [];
 
       if (aiProvider === 'google') {
-        results = await fetchTrendingRepos(frame);
+        const currentGoogleKey = googleKeyRef.current;
+        if (!currentGoogleKey) {
+            throw new Error("Google API Key 未配置。请点击 'KEY' 按钮设置。");
+        }
+        results = await fetchTrendingRepos(frame, currentGoogleKey);
       } else {
         addLog("接入 DeepSeek 推理网络 (Reasoning Mode)...");
-        // IMPORTANT: Use the Ref value to ensure we have the latest key inside async flows
-        const currentKey = deepseekKeyRef.current;
-        if (!currentKey) {
-             throw new Error("API Key 未配置。请点击 'KEY' 按钮设置。");
+        const currentDsKey = deepseekKeyRef.current;
+        if (!currentDsKey) {
+             throw new Error("DeepSeek API Key 未配置。请点击 'KEY' 按钮设置。");
         }
-        results = await fetchDeepSeekTrendingRepos(frame, currentKey);
+        results = await fetchDeepSeekTrendingRepos(frame, currentDsKey);
       }
       
       const duration = ((Date.now() - start) / 1000).toFixed(2);
@@ -170,8 +190,8 @@ const App: React.FC = () => {
       setStatus(AppStatus.ERROR);
       addLog(`严重错误: ${error.message || '未知网络故障'}`);
       
-      // Auto-open key modal if key is missing/invalid for DeepSeek
-      if (aiProvider === 'deepseek' && (error.message.includes('API Key') || error.message.includes('401'))) {
+      // Auto-open key modal if key is missing/invalid
+      if (error.message.includes('API Key') || error.message.includes('401')) {
          setShowKeyModal(true);
       }
 
@@ -272,20 +292,33 @@ const App: React.FC = () => {
       {/* API Key Modal */}
       {showKeyModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-           <div className="bg-[#050505] border-2 border-indigo-500 w-full max-w-md p-6 shadow-[0_0_30px_rgba(99,102,241,0.3)] relative">
-              <h3 className="text-xl font-cyber text-indigo-400 mb-4 tracking-wider flex items-center gap-2">
-                <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></span>
-                DEEPSEEK 密钥配置
+           <div className={`bg-[#050505] border-2 w-full max-w-md p-6 shadow-[0_0_30px_rgba(0,0,0,0.5)] relative transition-colors duration-500
+                ${aiProvider === 'deepseek' ? 'border-indigo-500 shadow-indigo-500/30' : 'border-green-500 shadow-green-500/30'}
+           `}>
+              <h3 className={`text-xl font-cyber mb-4 tracking-wider flex items-center gap-2
+                 ${aiProvider === 'deepseek' ? 'text-indigo-400' : 'text-green-400'}
+              `}>
+                <span className={`w-2 h-2 rounded-full animate-pulse
+                    ${aiProvider === 'deepseek' ? 'bg-indigo-500' : 'bg-green-500'}
+                `}></span>
+                {aiProvider === 'deepseek' ? 'DEEPSEEK' : 'GOOGLE GEMINI'} 密钥配置
               </h3>
               <p className="text-xs text-gray-400 font-mono mb-4">
-                 请输入您的 API Key 以接入 R1 推理网络。密钥仅存储在本地浏览器中。
+                 {aiProvider === 'deepseek' 
+                    ? '请输入您的 API Key 以接入 R1 推理网络。密钥仅存储在本地浏览器中。'
+                    : '请输入您的 Google Gemini API Key 以启用搜索和图像生成。密钥仅存储在本地浏览器中。'
+                 }
               </p>
               <input 
                  ref={keyInputRef}
-                 defaultValue={deepseekKey}
+                 defaultValue={aiProvider === 'deepseek' ? deepseekKey : googleKey}
                  type="password"
-                 placeholder="sk-..."
-                 className="w-full bg-gray-900/50 border border-gray-700 text-indigo-100 font-mono text-sm p-3 mb-6 focus:border-indigo-500 focus:outline-none focus:shadow-[0_0_10px_rgba(99,102,241,0.3)] transition-all placeholder-gray-700"
+                 placeholder={aiProvider === 'deepseek' ? "sk-..." : "AIzaSy..."}
+                 className={`w-full bg-gray-900/50 border border-gray-700 font-mono text-sm p-3 mb-6 focus:outline-none transition-all placeholder-gray-700
+                    ${aiProvider === 'deepseek' 
+                        ? 'text-indigo-100 focus:border-indigo-500 focus:shadow-[0_0_10px_rgba(99,102,241,0.3)]' 
+                        : 'text-green-100 focus:border-green-500 focus:shadow-[0_0_10px_rgba(34,197,94,0.3)]'}
+                 `}
               />
               <div className="flex gap-4">
                  <button 
@@ -295,8 +328,12 @@ const App: React.FC = () => {
                    取消
                  </button>
                  <button 
-                   onClick={saveDeepseekKey}
-                   className="flex-1 py-2 font-mono text-xs uppercase bg-indigo-600 text-white hover:bg-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all"
+                   onClick={saveKey}
+                   className={`flex-1 py-2 font-mono text-xs uppercase text-white transition-all shadow-[0_0_15px_rgba(0,0,0,0.4)]
+                      ${aiProvider === 'deepseek' 
+                        ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/30' 
+                        : 'bg-green-600 hover:bg-green-500 shadow-green-500/30'}
+                   `}
                  >
                    保存密钥
                  </button>
@@ -381,15 +418,17 @@ const App: React.FC = () => {
                    </button>
                    
                    {/* Key Config Button */}
-                   {aiProvider === 'deepseek' && (
-                     <button 
-                       onClick={() => setShowKeyModal(true)}
-                       className="text-[10px] font-mono px-2 py-0.5 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 rounded-sm transition-colors"
-                       title="设置 DeepSeek API Key"
-                     >
-                       KEY
-                     </button>
-                   )}
+                   <button 
+                     onClick={() => setShowKeyModal(true)}
+                     className={`text-[10px] font-mono px-2 py-0.5 border rounded-sm transition-colors
+                        ${aiProvider === 'google'
+                            ? 'border-green-500/30 text-green-300 hover:bg-green-500/20'
+                            : 'border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20'}
+                     `}
+                     title="配置 API Key"
+                   >
+                     KEY
+                   </button>
                 </div>
             </div>
             <div>
@@ -446,14 +485,16 @@ const App: React.FC = () => {
                     <span className={`w-1.5 h-1.5 rounded-full ${aiProvider === 'google' ? 'bg-green-500' : 'bg-indigo-500'}`}></span>
                     {aiProvider === 'google' ? 'GEMINI' : 'DEEPSEEK'}
                 </button>
-                 {aiProvider === 'deepseek' && (
-                     <button 
-                       onClick={() => setShowKeyModal(true)}
-                       className="text-xs font-mono px-3 py-1 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20 rounded-sm"
-                     >
-                       KEY
-                     </button>
-                 )}
+                 <button 
+                   onClick={() => setShowKeyModal(true)}
+                   className={`text-xs font-mono px-3 py-1 border rounded-sm
+                      ${aiProvider === 'google' 
+                        ? 'border-green-500/30 text-green-300 hover:bg-green-500/20' 
+                        : 'border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20'}
+                   `}
+                 >
+                   KEY
+                 </button>
              </div>
         </div>
       )}
@@ -531,6 +572,7 @@ const App: React.FC = () => {
               index={index}
               isFavorite={favorites.some(f => f.name === repo.name)}
               onToggleFavorite={() => toggleFavorite(repo)}
+              googleApiKey={googleKey}
             />
           ))}
         </div>

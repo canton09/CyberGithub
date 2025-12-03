@@ -1,8 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { Repo, TimeFrame } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const SYSTEM_INSTRUCTION = `
 You are CyberGit, an elite automated AI hunter specializing in finding trending open-source software on GitHub.
 Your output must be raw, valid JSON data extracted from live search results.
@@ -48,7 +46,13 @@ export const fetchRepoDetails = async (name: string): Promise<Partial<Repo> | nu
   }
 };
 
-export const fetchTrendingRepos = async (timeFrame: TimeFrame): Promise<Repo[]> => {
+export const fetchTrendingRepos = async (timeFrame: TimeFrame, apiKey: string): Promise<Repo[]> => {
+  if (!apiKey) {
+    throw new Error("请配置 Google API Key 以继续");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
   const dayMap = {
     '3d': '3',
     '7d': '7',
@@ -179,7 +183,11 @@ export const fetchTrendingRepos = async (timeFrame: TimeFrame): Promise<Repo[]> 
   }
 };
 
-export const generateRepoImage = async (name: string, description: string): Promise<string | null> => {
+export const generateRepoImage = async (name: string, description: string, apiKey?: string): Promise<string | null> => {
+  if (!apiKey) return null;
+  
+  const ai = new GoogleGenAI({ apiKey });
+
   try {
     const prompt = `
       Create a cyberpunk abstract header image for a software project named "${name}".
